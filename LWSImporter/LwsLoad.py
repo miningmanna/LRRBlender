@@ -91,6 +91,7 @@ def load_lws(filepath):
 	""" Create instance to be returned after parsing """
 	anim = LwsAnimation()
 	curObji = -1
+	objectPause = True
 	
 	lineskips = 0
 	for i in range(len(lines)):
@@ -112,6 +113,7 @@ def load_lws(filepath):
 			continue
 		
 		if line.startswith("AddNullObject"):
+			objectPause = False
 			
 			""" Add new object """
 			curObji += 1
@@ -121,15 +123,9 @@ def load_lws(filepath):
 			anim.objects[curObji].name = line.split(" ")[1]
 			continue
 		
-		if line.startswith("ParentObject"):
-			anim.objects[curObji].parent = int(line.split(" ")[1])
-			continue
-		
-		if line.startswith("PivotPoint"):
-			anim.objects[curObji].pivot = tuple(float(x) for x in line.split(" ")[1:4])
-			continue
-		
 		if line.startswith("LoadObject"):
+			objectPause = False
+			
 			filepath = line[(line.index(" ") + 1):]
 			filename = os.path.basename(filepath)
 			""" Remove file extension if present """
@@ -145,15 +141,31 @@ def load_lws(filepath):
 			anim.objects[curObji].filepath = filepath
 			continue
 		
+		if objectPause:
+			continue
+		
+		if line.startswith("ParentObject"):
+			anim.objects[curObji].parent = int(line.split(" ")[1])
+			continue
+		
+		if line.startswith("PivotPoint"):
+			anim.objects[curObji].pivot = tuple(float(x) for x in line.split(" ")[1:4])
+			continue
+		
+		
 		""" Object transform keyframes """
 		if line.startswith("ObjectMotion"):
 			lineskips, anim.objects[curObji].keyframes = parse_keyframes(lines, i)
-			pass
+			continue
 		
 		""" Object transparency keyframes """
 		if line.startswith("ObjDissolve (envelope)"):
 			lineskips, anim.objects[curObji].alphaKeyframes = parse_alpha_keyframes(lines, i)
-			pass
+			continue
+		
+		if line.startswith("AddLight") or line.startswith("ShowCamera"):
+			objectPause = True
+			continue
 		
 	
 	return anim

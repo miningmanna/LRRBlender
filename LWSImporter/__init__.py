@@ -16,6 +16,12 @@ import bpy
 from .operators import LWSImporter
 from .operators import LWOImporter
 
+classes = (
+    LWOImporter.LWOImporter,
+    LWOImporter.LRRLWO_PT_import_settings,
+    LWSImporter.LWSImporter,
+    LWSImporter.LRRLWS_PT_import_settings
+    )
 
 def menu_func_import(self, context):
     self.layout.operator(LWOImporter.LWOImporter.bl_idname,
@@ -24,14 +30,16 @@ def menu_func_import(self, context):
                          text="LRR LightWave Scene (.lws)")
 
 def register():
-    bpy.utils.register_class(LWOImporter.LWOImporter)
-    bpy.utils.register_class(LWSImporter.LWSImporter)
+    for c in classes:
+        bpy.utils.register_class(c)
+    
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
 def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-    bpy.utils.unregister_class(LWSImporter.LWSImporter)
-    bpy.utils.unregister_class(LWOImporter.LWOImporter)
+    
+    for c in reversed(classes):
+        bpy.utils.unregister_class(c)
 
 
 if __name__ == "__main__":
