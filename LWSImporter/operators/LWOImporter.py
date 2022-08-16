@@ -31,6 +31,7 @@ class LRRLWO_PT_import_settings(bpy.types.Panel):
         layout.prop(operator, "shared_path")
         layout.prop(operator, "reuse_assets")
         layout.prop(operator, "use_uv_files")
+        layout.prop(operator, "filter_closest")
 
 import re
 from .. import LwoLoad
@@ -62,6 +63,12 @@ class LWOImporter(bpy.types.Operator, ImportHelper):
         default = True
         )
     
+    filter_closest: BoolProperty(
+        name = "Closest filtering",
+        description = "Sets all texture filtering to be closest.",
+        default = False
+        )
+    
     def execute(self, context):
         keywords = self.as_keywords(ignore=("axis_forward",
                                             "axis_up",
@@ -79,7 +86,7 @@ class LWOImporter(bpy.types.Operator, ImportHelper):
         
         # If the file does not exist, try to get one from the shared folder
         if not uv_file_path.exists() and keywords["shared_path"] != "":
-            uv_file_path = Path(Path(keywords["shared_path"]).joinpath(uv_file_name))
+            uv_file_path = Path(Path(keywords["shared_path"]).joinpath(uv_file_path.name))
         
         if uv_file_path.exists():
             uv_data = UvLoad.load_uv(str(uv_file_path))
@@ -249,7 +256,9 @@ class LWOImporter(bpy.types.Operator, ImportHelper):
                     
                     tex.extension = "REPEAT"
                     
-                    if use_uv or ctex.interpolate:
+                    if keywords["filter_closest"]:
+                        tex.interpolation = "Closest"
+                    elif use_uv or ctex.interpolate:
                         tex.interpolation = "Linear"
                     else:
                         tex.interpolation = "Closest"

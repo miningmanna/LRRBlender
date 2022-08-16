@@ -31,6 +31,7 @@ class LRRLWS_PT_import_settings(bpy.types.Panel):
         layout.prop(operator, "shared_path")
         layout.prop(operator, "reuse_assets")
         layout.prop(operator, "use_uv_files")
+        layout.prop(operator, "filter_closest")
 
 from .. import LwsLoad
 from pathlib import Path
@@ -60,7 +61,11 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
         default = True
         )
     
-    
+    filter_closest: BoolProperty(
+        name = "Closest filtering",
+        description = "Sets all texture filtering to be closest.",
+        default = False
+        )
     
     def execute(self, context):
         keywords = self.as_keywords(ignore=("axis_forward",
@@ -83,6 +88,7 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
         
         
         # Create the objects
+        pivots = []
         objects = []
         for x in lws_anim.objects:
             
@@ -98,7 +104,7 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
                 
                 status = None
                 try:
-                    status = bpy.ops.import_mesh.lrrlwo(filepath = str(lwo_path), shared_path = keywords["shared_path"], reuse_assets = keywords["reuse_assets"], use_uv_files = keywords["use_uv_files"])
+                    status = bpy.ops.import_mesh.lrrlwo(filepath = str(lwo_path), shared_path = keywords["shared_path"], reuse_assets = keywords["reuse_assets"], use_uv_files = keywords["use_uv_files"], filter_closest = keywords["filter_closest"])
                 except Exception as e:
                     print("Failed to load {lwo_path} :")
                     print(e)
@@ -118,20 +124,44 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
             # Set rotation mode
             obj.rotation_mode = "ZYX"
             
+            # Create a pivot object if the pivot is not (0, 0, 0)
+            pivot = None
+            if x.pivot != (0, 0, 0):
+                pivot = bpy.data.objects.new(f"{x.name}_Pivot", None)
+                collection.objects.link(pivot)
+                # Set rotation mode
+                pivot.rotation_mode = "ZYX"
+                obj.parent = pivot
+                pivots.append(pivot)
+            else:
+                pivots.append(None)
+            
             # Set keyframe data
             for frame in x.keyframes:
                 fdata = x.keyframes[frame]
                 
-                obj.location = fdata[0]
-                obj.keyframe_insert("location", frame = frame)
-                
-                rot = fdata[1]
-                # Weird conversion
-                obj.rotation_euler = (rot[1], rot[0], rot[2])
-                obj.keyframe_insert("rotation_euler", frame = frame)
-                
-                obj.scale = fdata[2]
-                obj.keyframe_insert("scale", frame = frame)
+                if pivot:
+                    pivot.location = tuple(fdata[0][i] + fdata[2][i] * x.pivot[i] for i in range(3))
+                    pivot.keyframe_insert("location", frame = frame)
+                    
+                    rot = fdata[1]
+                    # Weird conversion
+                    pivot.rotation_euler = (rot[1], rot[0], rot[2])
+                    pivot.keyframe_insert("rotation_euler", frame = frame)
+                    
+                    pivot.scale = fdata[2]
+                    pivot.keyframe_insert("scale", frame = frame)
+                else:
+                    obj.location = fdata[0]
+                    obj.keyframe_insert("location", frame = frame)
+                    
+                    rot = fdata[1]
+                    # Weird conversion
+                    obj.rotation_euler = (rot[1], rot[0], rot[2])
+                    obj.keyframe_insert("rotation_euler", frame = frame)
+                    
+                    obj.scale = fdata[2]
+                    obj.keyframe_insert("scale", frame = frame)
             
             # Set alpha keyframes
             for frame in x.alphaKeyframes:
@@ -139,7 +169,12 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
                 obj.keyframe_insert("[\"Alpha\"]", frame = frame)
             
             # Make sure the keyframes interpolate linear
-            action = obj.id_data.animation_data.action
+            action = None
+            if pivot:
+                action = pivot.id_data.animation_data.action
+            else:
+                action = obj.id_data.animation_data.action
+            
             for fcurve in action.fcurves:
                 for keyframe in fcurve.keyframe_points:
                     keyframe.interpolation = "LINEAR"
@@ -153,13 +188,18 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
         # Parent the objects
         for i in range(len(lws_anim.objects)):
             obj_data = lws_anim.objects[i]
+            obj = objects[i]
+            pivot = pivots[i]
             if obj_data.parent == -1:
-                objects[i].parent = base
+                if pivot:
+                    pivot.parent = base
+                else:
+                    obj.parent = base
             else:
-                objects[i].parent = objects[obj_data.parent - 1]
-        
-        for odata in lws_anim.objects:
-            print(odata.name, f"Parent: {odata.parent}")
+                if pivot:
+                    pivot.parent = objects[obj_data.parent - 1]
+                else:
+                    obj.parent = objects[obj_data.parent - 1]
         
         # Set frames
         bpy.context.scene.frame_start = lws_anim.firstFrame
@@ -169,7 +209,6 @@ class LWSImporter(bpy.types.Operator, ImportHelper):
         # Flip normals if they have been scaled with -1
         for obj in objects:
             if obj.matrix_world.determinant() < 0 and obj.data:
-                print(f"Flipping normals of {obj.name}")
                 bpy.ops.object.select_all(action='DESELECT')
                 bpy.context.view_layer.objects.active = obj
                 bpy.ops.object.mode_set(mode = "EDIT")

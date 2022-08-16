@@ -149,7 +149,7 @@ def load_lws(filepath):
 			continue
 		
 		if line.startswith("PivotPoint"):
-			anim.objects[curObji].pivot = tuple(float(x) for x in line.split(" ")[1:4])
+			anim.objects[curObji].pivot = tuple(-float(x) for x in line.split(" ")[1:4])
 			continue
 		
 		
